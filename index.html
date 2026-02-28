@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SymptomTrack - Seu Monitor de Saúde</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' },
+                        danger: '#ef4444',
+                        warning: '#f59e0b',
+                        success: '#10b981'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.3s ease; }
+        .view { display: none; }
+        .view.active { display: block; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+        .calendar-day { aspect-ratio: 1 / 1; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+
+    <!-- Sistema de Toast -->
+    <div id="toast-container" class="fixed top-4 right-4 z-[100] flex flex-col gap-2"></div>
+
+    <div id="auth-overlay" class="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col items-center justify-center p-6 active">
+        <div class="w-full max-w-md space-y-8 animate__animated animate__zoomIn">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-primary-600 text-white rounded-2xl mb-4">
+                    <i data-lucide="activity" class="w-8 h-8"></i>
+                </div>
+                <h1 class="text-3xl font-bold tracking-tight">SymptomTrack</h1>
+                <p class="mt-2 text-gray-500 dark:text-gray-400">Entre para monitorar sua saúde gratuitamente</p>
+            </div>
+
+            <div id="auth-box" class="mt-8 bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
+                <div id="login-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">E-mail</label>
+                        <input type="email" id="login-email" class="w-full p-3 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="nome@exemplo.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Senha</label>
+                        <input type="password" id="login-password" class="w-full p-3 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="••••••••">
+                    </div>
+                    <button onclick="handleAuth('login')" class="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl transition-all active:scale-95" aria-label="Entrar na conta">Entrar</button>
+                    <p class="text-center text-sm text-gray-500 mt-4">Não tem conta? <button onclick="toggleAuthMode()" class="text-primary-600 font-semibold" aria-label="Mudar para cadastro">Cadastre-se</button></p>
+                </div>
+
+                <div id="register-form" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Nome Completo</label>
+                        <input type="text" id="reg-name" class="w-full p-3 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="João Silva">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">E-mail</label>
+                        <input type="email" id="reg-email" class="w-full p-3 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="nome@exemplo.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Senha</label>
+                        <input type="password" id="reg-password" class="w-full p-3 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="Crie uma senha forte">
+                    </div>
+                    <button onclick="handleAuth('register')" class="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl transition-all active:scale-95" aria-label="Criar nova conta">Criar Conta</button>
+                    <p class="text-center text-sm text-gray-500 mt-4">Já tem conta? <button onclick="toggleAuthMode()" class="text-primary-600 font-semibold" aria-label="Mudar para login">Fazer Login</button></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <nav id="sidebar" class="fixed left-0 top-0 h-full w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-40 hidden md:flex flex-col">
+        <div class="p-6">
+            <div class="flex items-center gap-3 text-primary-600 mb-8">
+                <i data-lucide="activity" class="w-8 h-8"></i>
+                <span class="text-xl font-bold text-gray-900 dark:text-white">SymptomTrack</span>
+            </div>
+            <ul class="space-y-2">
+                <li><button onclick="switchView('dashboard')" class="nav-btn active flex items-center gap-3 w-full p-3 rounded-xl transition-all bg-primary-50 dark:bg-primary-900/20 text-primary-600 font-medium" aria-label="Ir para Dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</button></li>
+                <li><button onclick="switchView('add-symptom')" class="nav-btn flex items-center gap-3 w-full p-3 rounded-xl transition-all text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Registrar novo sintoma"><i data-lucide="plus-circle"></i> Novo Registro</button></li>
+                <li><button onclick="switchView('history')" class="nav-btn flex items-center gap-3 w-full p-3 rounded-xl transition-all text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Ver histórico"><i data-lucide="history"></i> Histórico</button></li>
+                <li><button onclick="switchView('calendar')" class="nav-btn flex items-center gap-3 w-full p-3 rounded-xl transition-all text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Calendário de Ciclo"><i data-lucide="calendar-days"></i> Calendário</button></li>
+                <li><button onclick="switchView('reports')" class="nav-btn flex items-center gap-3 w-full p-3 rounded-xl transition-all text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Relatórios"><i data-lucide="file-text"></i> Relatórios</button></li>
+                <li><button onclick="switchView('profile')" class="nav-btn flex items-center gap-3 w-full p-3 rounded-xl transition-all text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Ver meu perfil"><i data-lucide="user"></i> Perfil</button></li>
+            </ul>
+        </div>
+        <div class="mt-auto p-6 space-y-4">
+            <button onclick="toggleTheme()" class="flex items-center justify-between w-full p-3 rounded-xl bg-gray-100 dark:bg-gray-700" aria-label="Alternar tema">
+                <span class="text-sm font-medium">Tema Escuro</span>
+                <i id="theme-icon" data-lucide="moon" class="w-5 h-5"></i>
+            </button>
+            <button onclick="logout()" class="flex items-center gap-3 w-full p-3 rounded-xl text-danger hover:bg-red-50 dark:hover:bg-red-900/10 transition-all" aria-label="Sair do sistema">
+                <i data-lucide="log-out"></i> Sair
+            </button>
+        </div>
+    </nav>
+
+    <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-40 flex justify-around p-4 md:hidden">
+        <button onclick="switchView('dashboard')" aria-label="Dashboard"><i data-lucide="layout-dashboard" class="w-6 h-6"></i></button>
+        <button onclick="switchView('add-symptom')" aria-label="Novo Registro"><i data-lucide="plus-circle" class="w-6 h-6"></i></button>
+        <button onclick="switchView('calendar')" aria-label="Calendário"><i data-lucide="calendar-days" class="w-6 h-6"></i></button>
+        <button onclick="switchView('history')" aria-label="Histórico"><i data-lucide="history" class="w-6 h-6"></i></button>
+        <button onclick="switchView('reports')" aria-label="Relatórios"><i data-lucide="file-text" class="w-6 h-6"></i></button>
+    </nav>
+
+    <main id="content" class="md:ml-64 p-4 md:p-8 pb-24 md:pb-8 max-w-7xl mx-auto hidden">
+        
+        <section id="dashboard" class="view active space-y-6">
+            <header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="animate__animated animate__fadeInLeft">
+                    <h2 class="text-2xl font-bold">Olá, <span id="user-display-name">Usuário</span>!</h2>
+                    <p class="text-gray-500">Resumo da sua saúde hoje.</p>
+                </div>
+                <div id="urgent-alert" class="hidden animate__animated animate__shakeX bg-red-100 border border-red-200 text-red-700 px-4 py-2 rounded-2xl flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span class="font-medium text-sm">Alerta: Intensidade alta detectada.</span>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate__animated animate__fadeIn">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl"><i data-lucide="activity"></i></div>
+                        <h3 class="font-semibold">Média Geral</h3>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span id="avg-intensity" class="text-4xl font-bold">0</span>
+                        <span class="text-gray-500">/ 10</span>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-2xl"><i data-lucide="calendar"></i></div>
+                        <h3 class="font-semibold">Sintomas/Semana</h3>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span id="weekly-count" class="text-4xl font-bold">0</span>
+                        <span class="text-gray-500">registros</span>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-2xl"><i data-lucide="trending-up"></i></div>
+                        <h3 class="font-semibold">Análise de Tendência</h3>
+                    </div>
+                    <p id="prediction-text" class="text-sm text-gray-500">Aguardando dados...</p>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 animate__animated animate__fadeInUp">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h3 class="font-bold text-lg">Evolução de Sintomas</h3>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-medium">Filtrar por:</label>
+                        <select id="chart-filter" onchange="updateChart()" class="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-sm p-2 rounded-xl outline-none focus:ring-2 focus:ring-primary-500">
+                            <option value="todos">Todos os Sintomas</option>
+                            <option value="Dor">Apenas Dor</option>
+                            <option value="Fadiga">Apenas Fadiga</option>
+                            <option value="Ansiedade">Apenas Ansiedade</option>
+                            <option value="Náusea">Apenas Náusea</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="h-64">
+                    <canvas id="symptomChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section id="calendar" class="view space-y-6">
+            <h2 class="text-2xl font-bold">Calendário de Ciclo e Bem-Estar</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 id="calendar-month-year" class="font-bold text-lg">Janeiro 2024</h3>
+                        <div class="flex gap-2">
+                            <button onclick="moveCalendar(-1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"><i data-lucide="chevron-left"></i></button>
+                            <button onclick="moveCalendar(1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"><i data-lucide="chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 text-center text-xs font-bold text-gray-400 mb-2 uppercase tracking-widest">
+                        <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                    </div>
+                    <div id="calendar-grid" class="calendar-grid"></div>
+                </div>
+                <div class="space-y-6">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700">
+                        <h4 class="font-bold mb-4">Legenda</h4>
+                        <ul class="space-y-3 text-sm">
+                            <li class="flex items-center gap-3"><span class="w-4 h-4 rounded-full bg-red-400"></span> Período Menstrual</li>
+                            <li class="flex items-center gap-3"><span class="w-4 h-4 rounded-full bg-primary-400"></span> Registros de Sintomas</li>
+                            <li class="flex items-center gap-3"><span class="w-4 h-4 rounded-full border-2 border-primary-500"></span> Hoje</li>
+                        </ul>
+                    </div>
+                    <div class="bg-primary-600 text-white p-6 rounded-3xl shadow-lg">
+                        <h4 class="font-bold mb-2">Dica de Saúde</h4>
+                        <p class="text-sm text-primary-100">Registrar seus sintomas durante o ciclo ajuda a prever flutuações de humor e fadiga.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="add-symptom" class="view space-y-6">
+            <h2 class="text-2xl font-bold">Novo Registro</h2>
+            <form id="symptom-form" class="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Categoria <span class="text-red-500">*</span></label>
+                        <select id="symptom-category" class="w-full p-4 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary-500" required>
+                            <option value="">Selecione...</option>
+                            <option value="Dor">Dor</option>
+                            <option value="Fadiga">Fadiga</option>
+                            <option value="Ansiedade">Ansiedade</option>
+                            <option value="Náusea">Náusea</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Intensidade: <span id="intensity-val" class="font-bold text-primary-600">5</span>/10</label>
+                        <input type="range" id="symptom-level" min="0" max="10" step="1" value="5" oninput="document.getElementById('intensity-val').textContent = this.value" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600">
+                        <div class="flex justify-between text-xs mt-2 text-gray-500"><span>Leve</span><span>Moderado</span><span>Intenso</span></div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Notas / Gatilhos (Opcional)</label>
+                    <textarea id="symptom-notes" rows="3" maxlength="200" class="w-full p-4 rounded-xl border border-gray-200 dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary-500" placeholder="O que aconteceu antes do sintoma?"></textarea>
+                </div>
+                <button type="submit" class="w-full md:w-auto px-10 py-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="save"></i> Salvar Registro
+                </button>
+            </form>
+        </section>
+
+        <section id="history" class="view space-y-6">
+            <h2 class="text-2xl font-bold">Histórico</h2>
+            <div id="history-list" class="space-y-4"></div>
+        </section>
+
+        <section id="reports" class="view space-y-6">
+            <h2 class="text-2xl font-bold">Relatórios</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl border border-gray-100 dark:border-gray-700 flex flex-col items-center text-center space-y-4">
+                    <div class="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center"><i data-lucide="file-down" class="w-8 h-8"></i></div>
+                    <h3 class="text-xl font-bold">Baixar TXT</h3>
+                    <p class="text-gray-500">Resumo simples para consulta médica.</p>
+                    <button onclick="downloadReport()" class="px-8 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all">Baixar Agora</button>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl border border-gray-100 dark:border-gray-700 flex flex-col items-center text-center space-y-4">
+                    <div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center"><i data-lucide="share-2" class="w-8 h-8"></i></div>
+                    <h3 class="text-xl font-bold">Exportar CSV</h3>
+                    <p class="text-gray-500">Formato para planilhas e Excel.</p>
+                    <button onclick="downloadCSV()" class="px-8 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all">Exportar Dados</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="profile" class="view space-y-6">
+            <h2 class="text-2xl font-bold">Perfil</h2>
+            <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl border border-gray-100 dark:border-gray-700">
+                <div class="flex flex-col md:flex-row items-center gap-8">
+                    <div class="w-32 h-32 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 text-4xl font-bold">
+                        <span id="profile-initials">JS</span>
+                    </div>
+                    <div class="flex-1 text-center md:text-left">
+                        <h3 id="profile-name" class="text-2xl font-bold">João Silva</h3>
+                        <p id="profile-email" class="text-gray-500">joao.silva@email.com</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        let state = {
+            isLoggedIn: false,
+            user: null,
+            symptoms: JSON.parse(localStorage.getItem('symptoms')) || [],
+            cycleDays: JSON.parse(localStorage.getItem('cycleDays')) || [],
+            theme: localStorage.getItem('theme') || 'light',
+            calendarDate: new Date()
+        };
+
+        let chart;
+        const chartCtx = document.getElementById('symptomChart').getContext('2d');
+
+        function init() {
+            lucide.createIcons();
+            applyTheme();
+            checkAuth();
+            if(state.isLoggedIn) {
+                renderAll();
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-success' : 'bg-danger';
+            toast.className = `p-4 text-white rounded-2xl shadow-xl flex items-center gap-2 animate__animated animate__fadeInRight ${bgColor}`;
+            toast.innerHTML = `
+                <i data-lucide="${type === 'success' ? 'check-circle' : 'x-circle'}" class="w-5 h-5"></i>
+                <span class="text-sm font-medium">${message}</span>
+            `;
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => {
+                toast.classList.replace('animate__fadeInRight', 'animate__fadeOutRight');
+                setTimeout(() => toast.remove(), 500);
+            }, 3000);
+        }
+
+        function checkAuth() {
+            if (!state.isLoggedIn) {
+                document.getElementById('auth-overlay').classList.add('active');
+                document.getElementById('content').classList.add('hidden');
+            }
+        }
+
+        function handleAuth(type) {
+            const email = type === 'login' ? document.getElementById('login-email').value : document.getElementById('reg-email').value;
+            const name = type === 'login' ? 'Usuário' : document.getElementById('reg-name').value;
+
+            if(!email || (type === 'register' && !name)) {
+                showToast("Por favor, preencha todos os campos obrigatórios.", "error");
+                return;
+            }
+
+            state.isLoggedIn = true;
+            state.user = { name, email };
+            
+            document.getElementById('auth-overlay').classList.replace('active', 'hidden');
+            document.getElementById('auth-overlay').classList.add('animate__animated', 'animate__fadeOut');
+            
+            document.getElementById('content').classList.remove('hidden');
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('sidebar').classList.add('flex');
+            
+            document.getElementById('user-display-name').textContent = name.split(' ')[0];
+            document.getElementById('profile-name').textContent = name;
+            document.getElementById('profile-email').textContent = email;
+            document.getElementById('profile-initials').textContent = name.charAt(0).toUpperCase();
+            
+            showToast(`Bem-vindo, ${name}!`);
+            renderAll();
+        }
+
+        function logout() {
+            state.isLoggedIn = false;
+            location.reload();
+        }
+
+        function switchView(viewId) {
+            const current = document.querySelector('.view.active');
+            const next = document.getElementById(viewId);
+            
+            if(current === next) return;
+
+            if(current) {
+                current.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+                setTimeout(() => {
+                    current.classList.remove('active', 'animate__animated', 'animate__fadeOut', 'animate__faster');
+                    next.classList.add('active', 'animate__animated', 'animate__fadeIn', 'animate__faster');
+                }, 100);
+            } else {
+                next.classList.add('active');
+            }
+
+            // UI updates for nav
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                const isActive = btn.getAttribute('onclick').includes(viewId);
+                btn.classList.toggle('bg-primary-50', isActive);
+                btn.classList.toggle('dark:bg-primary-900/20', isActive);
+                btn.classList.toggle('text-primary-600', isActive);
+                btn.classList.toggle('text-gray-500', !isActive);
+            });
+
+            if(viewId === 'calendar') renderCalendar();
+            if(viewId === 'dashboard') updateDashboard();
+        }
+
+        function applyTheme() {
+            document.documentElement.classList.toggle('dark', state.theme === 'dark');
+            const icon = document.getElementById('theme-icon');
+            icon.setAttribute('data-lucide', state.theme === 'dark' ? 'sun' : 'moon');
+            lucide.createIcons();
+            if(chart) initChart();
+        }
+
+        function toggleTheme() {
+            state.theme = state.theme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('theme', state.theme);
+            applyTheme();
+        }
+
+        document.getElementById('symptom-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const category = document.getElementById('symptom-category').value;
+            const level = parseInt(document.getElementById('symptom-level').value);
+            const notes = document.getElementById('symptom-notes').value;
+            
+            if(!category) {
+                showToast("Selecione uma categoria válida.", "error");
+                return;
+            }
+
+            const newEntry = { id: Date.now(), category, level, notes, date: new Date().toISOString() };
+            state.symptoms.unshift(newEntry);
+            localStorage.setItem('symptoms', JSON.stringify(state.symptoms));
+            
+            this.reset();
+            document.getElementById('intensity-val').textContent = '5';
+            showToast("Sintoma registrado com sucesso!");
+            switchView('dashboard');
+            renderAll();
+        });
+
+        function renderAll() {
+            updateDashboard();
+            updateHistory();
+            renderCalendar();
+        }
+
+        function updateDashboard() {
+            const last7 = state.symptoms.slice(0, 10);
+            const avg = last7.length > 0 ? (last7.reduce((a, b) => a + b.level, 0) / last7.length).toFixed(1) : 0;
+            
+            document.getElementById('avg-intensity').textContent = avg;
+            document.getElementById('weekly-count').textContent = state.symptoms.filter(s => {
+                const d = new Date(s.date);
+                const now = new Date();
+                return (now - d) < (7 * 24 * 60 * 60 * 1000);
+            }).length;
+
+            const urgent = state.symptoms.some(s => s.level >= 8 && (new Date() - new Date(s.date)) < 48 * 3600000);
+            document.getElementById('urgent-alert').classList.toggle('hidden', !urgent);
+
+            const pred = document.getElementById('prediction-text');
+            if(state.symptoms.length < 5) pred.textContent = "Adicione mais 5 registros para análise inteligente.";
+            else if(avg > 7) pred.textContent = "Tendência de alta. Recomendado repouso e hidratação.";
+            else pred.textContent = "Seu quadro parece estável no momento.";
+
+            initChart();
+        }
+
+        function initChart() {
+            if(chart) chart.destroy();
+            const isDark = state.theme === 'dark';
+            const filter = document.getElementById('chart-filter').value;
+            
+            let filtered = [...state.symptoms].reverse().slice(-15);
+            if(filter !== 'todos') filtered = filtered.filter(s => s.category === filter);
+
+            chart = new Chart(chartCtx, {
+                type: 'line',
+                data: {
+                    labels: filtered.map(s => new Date(s.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })),
+                    datasets: [{
+                        label: 'Intensidade',
+                        data: filtered.map(s => s.level),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, max: 10, grid: { color: isDark ? '#374151' : '#f3f4f6' }, ticks: { color: isDark ? '#9ca3af' : '#6b7280' } },
+                        x: { grid: { display: false }, ticks: { color: isDark ? '#9ca3af' : '#6b7280' } }
+                    }
+                }
+            });
+        }
+
+        function updateChart() { initChart(); }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            const monthLabel = document.getElementById('calendar-month-year');
+            const date = state.calendarDate;
+            
+            grid.innerHTML = '';
+            monthLabel.textContent = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+            const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+            const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+
+            for(let i = 0; i < firstDay; i++) {
+                grid.appendChild(document.createElement('div'));
+            }
+
+            for(let d = 1; d <= daysInMonth; d++) {
+                const dayEl = document.createElement('button');
+                const fullDate = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                const isCycle = state.cycleDays.includes(fullDate);
+                const hasSymptom = state.symptoms.some(s => s.date.startsWith(fullDate));
+                const isToday = new Date().toISOString().split('T')[0] === fullDate;
+
+                dayEl.className = `calendar-day relative flex flex-col items-center justify-center rounded-xl transition-all border border-transparent hover:border-primary-300 dark:hover:border-primary-700 font-medium text-sm
+                    ${isCycle ? 'bg-red-50 text-red-600 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800'}
+                    ${isToday ? 'border-primary-500 shadow-sm' : ''}`;
+                
+                dayEl.innerHTML = `
+                    <span>${d}</span>
+                    <div class="flex gap-1 mt-1">
+                        ${isCycle ? '<span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>' : ''}
+                        ${hasSymptom ? '<span class="w-1.5 h-1.5 rounded-full bg-primary-400"></span>' : ''}
+                    </div>
+                `;
+                
+                dayEl.onclick = () => toggleCycleDay(fullDate);
+                grid.appendChild(dayEl);
+            }
+        }
+
+        function toggleCycleDay(dateStr) {
+            if(state.cycleDays.includes(dateStr)) {
+                state.cycleDays = state.cycleDays.filter(d => d !== dateStr);
+                showToast("Dia removido do ciclo.");
+            } else {
+                state.cycleDays.push(dateStr);
+                showToast("Dia marcado como ciclo menstrual.");
+            }
+            localStorage.setItem('cycleDays', JSON.stringify(state.cycleDays));
+            renderCalendar();
+        }
+
+        function moveCalendar(dir) {
+            state.calendarDate.setMonth(state.calendarDate.getMonth() + dir);
+            renderCalendar();
+        }
+
+        function updateHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+            if(state.symptoms.length === 0) {
+                list.innerHTML = `<div class="p-12 text-center text-gray-500 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-3xl">Nenhum registro.</div>`;
+                return;
+            }
+            state.symptoms.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 flex items-center justify-between animate__animated animate__fadeIn';
+                item.innerHTML = `
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${s.level > 7 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}">
+                            ${s.level}
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-sm">${s.category}</h4>
+                            <p class="text-[10px] text-gray-400">${new Date(s.date).toLocaleString('pt-BR')}</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteSymptom(${s.id})" class="text-gray-300 hover:text-red-500 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                `;
+                list.appendChild(item);
+            });
+            lucide.createIcons();
+        }
+
+        function deleteSymptom(id) {
+            state.symptoms = state.symptoms.filter(s => s.id !== id);
+            localStorage.setItem('symptoms', JSON.stringify(state.symptoms));
+            showToast("Registro removido.", "success");
+            renderAll();
+        }
+
+        function downloadReport() {
+            const content = state.symptoms.map(s => `[${new Date(s.date).toLocaleString()}] ${s.category}: Nível ${s.level}. Notas: ${s.notes || 'N/A'}`).join('\n');
+            const blob = new Blob([`RELATÓRIO SYMPTOMTRACK\nUsuário: ${state.user.name}\n\n${content}`], {type: 'text/plain'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `sintomas-${Date.now()}.txt`;
+            a.click();
+        }
+
+        function downloadCSV() {
+            const csv = "Data,Categoria,Intensidade,Notas\n" + state.symptoms.map(s => `${s.date},${s.category},${s.level},"${s.notes}"`).join('\n');
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `dados-saude.csv`;
+            a.click();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
